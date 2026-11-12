@@ -1,0 +1,36 @@
+# golangci-lint v2.15.0 settings: every ignored error is a finding. The
+# ci.yml job lint runs it and fails on any nolint comment, which no setting
+# can turn off.
+version: "2"
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - errorlint
+    - nilerr
+    - nilnesserr
+    - forcetypeassert
+    - errchkjson
+    - rowserrcheck
+    - sqlclosecheck
+    - gocritic
+  settings:
+    errcheck:
+      check-blank: true
+      check-type-assertions: true
+      disable-default-exclusions: true
+    gocritic:
+      disable-all: true
+      enabled-checks:
+        - uncheckedInlineErr
+  exclusions:
+    presets: []
+    rules:
+      # pgfallback.Pool keeps an application's BeforeAcquire, which pgx
+      # deprecated but still calls.
+      - linters: [staticcheck]
+        text: "SA1019: .*pgxpool.Config.\\.BeforeAcquire is deprecated"
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false

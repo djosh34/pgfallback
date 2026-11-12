@@ -1,0 +1,31 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # go get of the module at the tag, through proxy.golang.org only. The first
+  # fetch fixes the version in the proxy and in sum.golang.org for good, so
+  # this job stays the last one: a later failure could not reuse the tag.
+  go-get:
+    needs: ci
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: go get through proxy.golang.org
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bash release-check.sh "$TAG" "$TAG"
