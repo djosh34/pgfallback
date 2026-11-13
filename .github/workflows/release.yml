@@ -3,6 +3,9 @@ name: release
 on:
   push:
     tags: ['v*']
+  # autopatch.yml dispatches it on the tag it created, since a tag pushed
+  # with GITHUB_TOKEN starts no workflow.
+  workflow_dispatch:
 
 permissions:
   contents: read
