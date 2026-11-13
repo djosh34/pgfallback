@@ -8,7 +8,7 @@ So while there is no primary, reads keep working and writes fail with an error t
 go get github.com/djosh34/pgfallback@latest
 ```
 
-It needs Go 1.25 and adds pgx v5. It does not import GORM.
+It needs the Go version in `go.mod`, which is the latest Go release, and adds pgx v5. It does not import GORM.
 
 ## What it does
 
