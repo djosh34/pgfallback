@@ -67,3 +67,16 @@ jobs:
           go run "$lint" run
       - name: shellcheck
         run: shellcheck release-check.sh testdata/cluster.sh
+
+  # Trivy skips the Go standard library by default. Comprehensive mode checks
+  # it against the go line in go.mod. A CVE of any severity fails the job.
+  trivy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/src:ro" docker.io/aquasec/trivy:0.76.2 fs --scanners vuln --detection-priority comprehensive --exit-code 1 /src
