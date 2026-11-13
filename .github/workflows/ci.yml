@@ -70,6 +70,7 @@ jobs:
 
   # Trivy skips the Go standard library by default. Comprehensive mode checks
   # it against the go line in go.mod. A CVE of any severity fails the job.
+  # autopatch.yml runs the same command on main.
   trivy:
     runs-on: ubuntu-24.04
     steps:

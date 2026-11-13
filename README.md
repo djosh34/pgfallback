@@ -117,7 +117,7 @@ A read on a read address sees what that standby has applied, and nothing bounds 
 
 ## Updates
 
-A daily run of [`autopatch.yml`](.github/workflows/autopatch.yml) keeps the `go` line at the latest Go release and every dep at its latest. When that changes anything and CI passes, it merges the change and releases the next patch version. When nothing changes, it runs the Trivy check on `main`.
+A daily run of [`autopatch.yml`](.github/workflows/autopatch.yml) keeps the `go` line at the latest Go release and the deps at their latest. When that changes anything and CI passes, it merges the change and releases the next patch version. When nothing changes, it runs the Trivy check on `main`.
 
 ## Licence
 
