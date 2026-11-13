@@ -1,10 +1,11 @@
 name: autopatch
 
-# Every day: set the go line to the latest Go, update the deps with
-# go get -u ./..., and when that changes go.mod or go.sum, open a PR from the branch autopatch, run ci.yml on
-# it, merge it when green and release the next patch version. When nothing
-# changes, run Trivy on main, so a new CVE turns the day red. Any failure ends
-# the run red; a release that fails after the merge is not resumed.
+# Every day: set the go line to the latest Go and update the deps with
+# go get -u ./... When that changes go.mod or go.sum, open a PR from the branch
+# autopatch, run ci.yml on it, merge it when green and release the next patch
+# version. When nothing changes, run Trivy on main, so a new CVE turns the day
+# red. Any failure ends the run red; a release that fails after the merge is
+# not resumed.
 on:
   schedule:
     - cron: '17 4 * * *'
@@ -77,7 +78,7 @@ jobs:
           # A branch left by a red run is deleted, which closes its PR. A
           # force-push over it would fail once main changed a workflow file,
           # which GITHUB_TOKEN may not do.
-          if git ls-remote --exit-code --heads origin autopatch; then
+          if git ls-remote --exit-code origin refs/heads/autopatch; then
             git push origin --delete autopatch
           fi
           git push origin autopatch
