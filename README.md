@@ -115,6 +115,10 @@ A read on a read address sees what that standby has applied, and nothing bounds 
 
 `go test -race ./...` needs docker and openssl. `testdata/cluster.sh` starts PostgreSQL 18 in docker: a primary, two streaming standbys and a standby with `hot_standby` off. Lint: `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run`.
 
+## Updates
+
+A daily run of [`autopatch.yml`](.github/workflows/autopatch.yml) keeps the `go` line at the latest Go release and the deps at their latest. When that changes anything and CI passes, it merges the change and releases the next patch version. When nothing changes, it runs the Trivy check on `main`.
+
 ## Licence
 
 Apache-2.0, see [LICENSE](LICENSE).

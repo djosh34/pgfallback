@@ -1,0 +1,131 @@
+name: autopatch
+
+# Every day: set the go line to the latest Go and update the deps with
+# go get -u ./... When that changes go.mod or go.sum, open a PR from the branch
+# autopatch, run ci.yml on it, merge it when green and release the next patch
+# version. When nothing changes, run Trivy on main, so a new CVE turns the day
+# red. Any failure ends the run red; a release that fails after the merge is
+# not resumed.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: autopatch
+
+jobs:
+  autopatch:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Upgrade
+        id: upgrade
+        run: |
+          set -euo pipefail
+          # setup-go sets GOTOOLCHAIN=local. With auto, go fetches the
+          # version this step writes.
+          export GOTOOLCHAIN=auto
+          go=$(curl -fsSL 'https://go.dev/dl/?mode=json' | jq -er '[.[] | select(.stable)][0].version')
+          go=${go#go}
+          go mod edit -go="$go"
+          go get -u ./...
+          go mod tidy
+          git diff
+          changed=true
+          if git diff --quiet; then
+            changed=false
+          fi
+          echo "go=$go" >>"$GITHUB_OUTPUT"
+          echo "changed=$changed" >>"$GITHUB_OUTPUT"
+
+      # The command of the trivy job in ci.yml.
+      - name: Trivy on main
+        if: steps.upgrade.outputs.changed == 'false'
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/src:ro" docker.io/aquasec/trivy:0.76.2 fs --scanners vuln --detection-priority comprehensive --exit-code 1 /src
+
+      # A push with GITHUB_TOKEN starts no workflow, so ci.yml is dispatched.
+      - name: PR and CI
+        id: pr
+        if: steps.upgrade.outputs.changed == 'true'
+        env:
+          GO_VERSION: ${{ steps.upgrade.outputs.go }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Go $GO_VERSION and the latest deps"
+          body="The daily [autopatch run]($RUN_URL) set the go line to the latest Go and ran \`go get -u ./... && go mod tidy\`. It merges this PR when test, lint and trivy are green, then releases the next patch version."
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C autopatch
+          git commit -am "$title"
+          # A branch left by a red run is deleted, which closes its PR. A
+          # force-push over it would fail once main changed a workflow file,
+          # which GITHUB_TOKEN may not do.
+          if git ls-remote --exit-code origin refs/heads/autopatch; then
+            git push origin --delete autopatch
+          fi
+          git push origin autopatch
+          sha=$(git rev-parse HEAD)
+          url=$(gh pr create --head autopatch --base main --title "$title" --body "$body")
+          pr=${url##*/}
+          echo "pr=$pr" >>"$GITHUB_OUTPUT"
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+
+          out=$(gh workflow run ci.yml --ref autopatch)
+          if [[ ! $out =~ /actions/runs/([0-9]+) ]]; then
+            echo "autopatch: no run URL from gh workflow run: $out" >&2
+            exit 1
+          fi
+          gh run watch "${BASH_REMATCH[1]}" --exit-status --interval 30
+
+      - name: Merge and release
+        if: steps.upgrade.outputs.changed == 'true'
+        env:
+          GO_VERSION: ${{ steps.upgrade.outputs.go }}
+          PR: ${{ steps.pr.outputs.pr }}
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # With --repo, and not with GH_REPO alone, gh leaves the local
+          # branches alone.
+          gh pr merge "$PR" --repo "$GH_REPO" --squash --delete-branch --match-head-commit "$SHA"
+          merge=$(gh pr view "$PR" --json mergeCommit --jq .mergeCommit.oid)
+
+          # The checkout has no tags. The first line is the newest v* tag.
+          tags=$(git ls-remote --tags --sort=-v:refname origin 'v*')
+          newest=${tags%%$'\n'*}
+          newest=${newest##*refs/tags/}
+          newest=${newest%'^{}'}
+          if [[ ! $newest =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "autopatch: newest tag '$newest' is not vX.Y.Z" >&2
+            exit 1
+          fi
+          tag="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+
+          notes=$(printf "Go %s and the latest deps, from the daily autopatch (#%s).\n\n\`\`\`bash\ngo get github.com/%s@%s\n\`\`\`\n" "$GO_VERSION" "$PR" "$GH_REPO" "$tag")
+          gh release create "$tag" --target "$merge" --title "$tag" --notes "$notes"
+
+          # GITHUB_TOKEN's tag starts no workflow, so release.yml is dispatched.
+          out=$(gh workflow run release.yml --ref "$tag")
+          if [[ ! $out =~ /actions/runs/([0-9]+) ]]; then
+            echo "autopatch: no run URL from gh workflow run: $out" >&2
+            exit 1
+          fi
+          gh run watch "${BASH_REMATCH[1]}" --exit-status --interval 30
