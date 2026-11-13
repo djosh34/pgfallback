@@ -213,14 +213,20 @@ func (f *fallback) addReads(cc *pgx.ConnConfig) error {
 		return err
 	}
 	ports := map[string][]uint16{}
+	rwCount := len(cc.Fallbacks)
 	fallbacks := slices.Clone(cc.Fallbacks)
 	for _, r := range f.reads {
 		ports[r.host] = append(ports[r.host], r.port)
-		tlsConfig := cc.TLSConfig.Clone()
-		tlsConfig.ServerName = r.host
-		fallbacks = append(fallbacks, &pgconn.FallbackConfig{Host: r.host, Port: r.port, TLSConfig: tlsConfig})
+		fallbacks = append(fallbacks, &pgconn.FallbackConfig{Host: r.host, Port: r.port, TLSConfig: cc.TLSConfig})
 	}
 	cc.Fallbacks = fallbacks
+	// pgx keeps the client certificate of sslcert and sslkey per TLS config,
+	// and only Copy hands it on to a clone.
+	copied := cc.Config.Copy()
+	for i, r := range f.reads {
+		copied.Fallbacks[rwCount+i].TLSConfig.ServerName = r.host
+	}
+	cc.Config = *copied
 	// pgx tries the rw hosts from now on.
 	started := time.Now()
 
